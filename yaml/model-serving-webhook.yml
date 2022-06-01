@@ -1,0 +1,68 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: model-serving-webhook
+  namespace: hops-system
+webhooks:
+  - name: model-serving-webhook.hops-system.svc
+    clientConfig:
+      service:
+        name: model-serving-webhook
+        namespace: hops-system
+        path: "/mutate"
+      caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUROakNDQWg2Z0F3SUJBZ0lKQU1ObVFhdVEvZFQvTUEwR0NTcUdTSWIzRFFFQkN3VUFNREF4TGpBc0JnTlYKQkFNTUpXMXZaR1ZzTFhObGNuWnBibWN0ZDJWaWFHOXZheTVvYjNCekxYTjVjM1JsYlM1emRtTXdIaGNOTWpJdwpOVE14TVRjd01EVXdXaGNOTXpJd05USTRNVGN3TURVd1dqQXdNUzR3TEFZRFZRUUREQ1Z0YjJSbGJDMXpaWEoyCmFXNW5MWGRsWW1odmIyc3VhRzl3Y3kxemVYTjBaVzB1YzNaak1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0MKQVE4QU1JSUJDZ0tDQVFFQTJwd2JlTHBKcTZsT0c5YjdnWWlMYm5acjRVUUdIQ1lPRVlFRGlqSENLaDBhOFlPTgphRHo3Vk03ZWFDbGFDbURjekgwTjdCQy9MZ1dhRzljNGt5Tk5GeGRwSGRVY2pwekNya1BkK1JZWml4NEhzdEVHCm1pMzc4dzUyQ0VlbGhxL0pxczhCb2FiM1N1K2c5U2tuN3RTTXBwUk54VFJFd0kySVMranBEaVNDRGE3UGJEMjEKUVN6TmtwK2Z1aTZaUWhrUGV5VU5jQTY4b3d4VmkvM2Jva2JXMm1iQjh1ZVBVOXhlY0JkQ0FZRlhOeWo4S25GVAp1cXg4ZjQ0d3hUU05zQVFPajRobitDV3JQS0RIcUhkZjFlWEl4cXVqWUl4alpaTlFlQWhRU3ZCZTByS2NQdW5tCnJoLzJwRFRKZ2hqcHVpTzV3MzJpQ0hRWWg3NE0xeWpIMGUwV0t3SURBUUFCbzFNd1VUQWRCZ05WSFE0RUZnUVUKc2dGTEYwaVNrNFp0ZzZ4Q0ZtamJlRlJ5K1o4d0h3WURWUjBqQkJnd0ZvQVVzZ0ZMRjBpU2s0WnRnNnhDRm1qYgplRlJ5K1o4d0R3WURWUjBUQVFIL0JBVXdBd0VCL3pBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQVFFQUFsbUtsV1o3Cjc1QkpubHhERmpabEF1NFFLdkRQQmNIMlJ6TDBHeVlaWm1rS3Jtd0IzOHBsOThLeEcvV3hMR3J3bWFqZU5ZMm4KQkZqbGxWUEpWOERrcC9wWldaUUthUkp6UFNNRTRvSmZ5dHMwWksxODgwZDRRMjdScFBBdjBDYkxleVZxcFJuRgpBTGJ6THBtejMwcEtLdDBmUEErdHloeDBpeTZYZDhBeUk1Z1lKUjNYL05DTnhud0RjTGJzUHp3NnV1U2NjT1dYCjZuZUNFaUlYT3VVakFaWXI3OE9BQ0Jid1dvamdxSjlpcCt0MHVTRVdtdEVXQm5kYVR5dFB0bjVlbDh4NXJTbG4KL0t2V29Sdjd6ZlBMRXBrTEI5eUVxb05mSE5PQTF6OEpKZ004K2VLNkFmQlZxMTVxMXEzMkl6MnNyVjNIU2VTNgpRdDVsZ2NPYVdMbnVoQT09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    objectSelector:
+      matchExpressions:
+      - key: serving.hops.works/id
+        operator: Exists
+    rules:
+      - operations: ["CREATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+        scope: "Namespaced"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-serving-webhook
+  namespace: hops-system
+  labels:
+    app: model-serving-webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: model-serving-webhook
+  template:
+    metadata:
+      labels:
+        app: model-serving-webhook
+    spec:
+      containers:
+        - name: server
+          image: "javierdlrm/model-serving-webhook:latest"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8443
+              name: webhook-api
+          volumeMounts:
+            - name: model-serving-webhook-tls-certs
+              mountPath: /secrets/tls
+              readOnly: true
+      volumes:
+        - name: model-serving-webhook-tls-certs
+          secret:
+            secretName: model-serving-webhook-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-serving-webhook
+  namespace: hops-system
+spec:
+  selector:
+    app: model-serving-webhook
+  ports:
+    - port: 443
+      targetPort: webhook-api
