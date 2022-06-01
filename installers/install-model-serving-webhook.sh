@@ -2,12 +2,31 @@
 
 echo "... generating self-signed cert"
 
+cat >${HOPS_YAML_FILES}/server.conf <<EOF
+[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+prompt = no
+[req_distinguished_name]
+CN = model-serving-webhook.hops-system.svc
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth, serverAuth
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = model-serving-webhook.hops-system.svc
+EOF
+
+# Generate the CA cert and private key
+openssl req -nodes -new -x509 -keyout ${HOPS_YAML_FILES}/model-serving-webhook-ca.key -out ${HOPS_YAML_FILES}/model-serving-webhook-ca.crt -subj "/CN=Model Serving Webhook CA"
+
+# Generate the private key for the webhook server
 openssl genrsa -out ${HOPS_YAML_FILES}/model-serving-webhook.key ${MODEL_SERVING_WEBHOOK_CERT_KEY_SIZE}
 
-openssl req -x509 -new -nodes -key ${HOPS_YAML_FILES}/model-serving-webhook.key \
-  -subj "/CN=model-serving-webhook.hops-system.svc" \
-  -days ${MODEL_SERVING_WEBHOOK_CERT_DAYS} \
-  -out ${HOPS_YAML_FILES}/model-serving-webhook.crt
+# Generate a Certificate Signing Request (CSR) for the private key, and sign it with the private key of the CA.
+openssl req -new -key ${HOPS_YAML_FILES}/model-serving-webhook.key -subj "/CN=model-serving-webhook.hops-system.svc" -config ${HOPS_YAML_FILES}/server.conf \
+    | openssl x509 -req -CA ${HOPS_YAML_FILES}/model-serving-webhook-ca.crt -CAkey ${HOPS_YAML_FILES}/model-serving-webhook-ca.key -CAcreateserial -out ${HOPS_YAML_FILES}/model-serving-webhook.crt -extensions v3_req -extfile ${HOPS_YAML_FILES}/server.conf
 
 printf "\n... creating kube TLS secret \n"
 
